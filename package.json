@@ -1,0 +1,29 @@
+{
+  "name": "katip-pipeline",
+  "version": "1.0.0",
+  "description": "Katip yazılımı için MEB kaynaklarından veri çeken bir pipeline",
+  "keywords": [
+    "pipeline"
+  ],
+  "homepage": "https://github.com/yaso09/katip-pipeline#readme",
+  "bugs": {
+    "url": "https://github.com/yaso09/katip-pipeline/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yaso09/katip-pipeline.git"
+  },
+  "license": "GPL-3.0",
+  "author": "Yasir Eymen Kayabaşı",
+  "type": "commonjs",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "axios": "^1.13.6",
+    "cheerio": "^1.2.0",
+    "puppeteer": "^24.40.0"
+  }
+}
