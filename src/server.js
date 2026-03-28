@@ -27,10 +27,15 @@ const ADMIN_USERNAME = process.env.ADMIN_GITHUB_USERNAME || 'yaso09';
 passport.serializeUser((user, done) => done(null, user));
 passport.deserializeUser((obj, done) => done(null, obj));
 
+  // Dinamik Callback URL: Öncelik APP_URL'de, yoksa Vercel URL'i, o da yoksa localhost.
+  const protocol = (process.env.NODE_ENV === 'production' || process.env.VERCEL_URL) ? 'https' : 'http';
+  const domain = process.env.APP_URL || (process.env.VERCEL_URL ? `${protocol}://${process.env.VERCEL_URL}` : `${protocol}://localhost:${PORT}`);
+  const callbackURL = domain.endsWith('/') ? `${domain}auth/github/callback` : `${domain}/auth/github/callback`;
+
 passport.use(new GitHubStrategy({
     clientID: process.env.GITHUB_CLIENT_ID || 'dummy_id',
     clientSecret: process.env.GITHUB_CLIENT_SECRET || 'dummy_secret',
-    callbackURL: `http://localhost:${PORT}/auth/github/callback`
+    callbackURL: callbackURL
   },
   function(accessToken, refreshToken, profile, done) {
     if (profile.username !== ADMIN_USERNAME) {
