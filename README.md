@@ -1,208 +1,61 @@
-# Soru Toplayıcı
+# 📚 Katip Pipeline
 
-Bu proje, `ogmmateryal.eba.gov.tr` üzerindeki soru bankası testlerini ID bazlı dolaşarak soruları, şıkları ve doğru cevabı otomatik şekilde toplayan bir Node.js betiğidir. Çıktılar yerel diskte JSON dosyalarına kaydedilir; ilerleme bilgisi ve hata kayıtları da ayrı tutulur. Kod, `get-questions.js` içindeki toplama mantığını `index.js` üzerinden çalıştırır.
+**Eğitim Materyalleri Otonom Veri Aktarım Sistemine Hoş Geldiniz!**
 
-## Amaç
+Katip Pipeline, Türkiye Cumhuriyeti Milli Eğitim Bakanlığı (MEB) kaynaklarından –özellikle OGM Materyal üzerinden– akademik içerikleri ve test bankası sorularını otonom olarak (web scraping ile) çeken ve doğrudan GitHub deponuza senkronize eden modern bir Node.js sistemidir.
 
-Bu programın temel amacı:
+## ✨ Öne Çıkan Özellikler
 
-- belirli bir ID aralığındaki soruları taramak,
-- sayfa HTML'inden soru, şıklar ve cevabı ayıklamak,
-- başarılı kayıtları kalıcı JSON dosyasına yazmak,
-- başarısız ID'leri daha sonra yeniden denemek,
-- 404 bulununca işlemi durdurmak.
+- ☁️ **"Sıfır" Veri Kaybı ve Doğrudan GitHub Senkronizasyonu:** Yerel disk yerine GitHub REST API'sini kullanan akıllı `sha` önbelleği (Caching) sayesinde **409 Conflict** hataları onarılmıştır. Tüm asenkron süreçler `Promise.all` ile saniye kaybetmeden asenkron çalışır ve sunucu (GitHub) API limitlerini aşmadan senkronizasyon sağlar.
+- 🇹🇷 **Native Fetch ile Kesin Encoding (Türkçe Desteği):** Türkçe karakterleri (windows-1254 vb.) sorunsuz çekip dönüştürebilmek için yavaş ve sorunlu konsol `curl` bağımlılığı kaldırılmış, doğrudan sistem çekirdeğindeki Native `fetch` yapısına geçirilmiştir. Sorularınızda bozuk karakter yaşanmaz.
+- 🎨 **Akademik & Minimalist "Dashboard" (Kontrol Paneli):** `Express.js` altyapısında sunulan arayüzümüz; göz yormayan açık kağıt hissiyatı, Crimson Pro serif stili (makale dizgisi) hissi ile terminal pencerelerine ihtiyacı ortadan kaldırır. "Durdur/Başlat" fonksiyonlarına tam yetkilidir.
+- 🛡️ **GitHub OAuth2 Yönetici Koruması:** Web arayüzünüz tamamen size aittir. `passport-github2` ile şifrelenen web sunucusuna sadece `.env` içerisinde belirlediğiniz tek veya belirli bir "Yönetici (Admin)" kullanıcı adı dışında hiçbir GitHub hesabı erişemez. Projeniz güvendedir!
 
-## Nasıl çalışır?
+## 🚀 Kurulum
 
-Program `index.js` ile başlar ve `getQuestions()` fonksiyonunu çalıştırır. Ana mantık `get-questions.js` içindedir.
+1. Depoyu bilgisayarınıza / sunucunuza aktarın.
+2. Gerekli kütüphaneleri (Express.js, Passport vs.) yükleyin:
+   ```bash
+   npm install
+   ```
+3. Ayar dosyasını (`.env`) kendi bilgilerinize göre oluşturun.
 
-İşleyiş şu sırayı izler:
+## ⚙️ Yapılandırma (`.env` Dosyası)
 
-1. `progress.json`, `sorular.json` ve `logs.json` okunur.
-2. `lastSuccessId + 1` değerinden itibaren yeni tarama başlar.
-3. Önce daha önce başarısız olmuş ID'ler tekrar denenir.
-4. Ardından 20'şerlik batch'ler halinde yeni ID'ler işlenir.
-5. Her ID için HTML, `curl` ile çekilir.
-6. HTML içinden soru, şıklar ve cevap regex ile ayrıştırılır.
-7. Sonuç başarılıysa `sorular.json` içine eklenir.
-8. Her adımda `progress.json` ve `logs.json` güncellenir.
-9. 404 görülürse program durdurulur.
+Projenizin ana dizinine bir adet `.env` dosyası oluşturun (veya mevcut `.env.example` isimli dosyayı kopyalayın).
 
-## Dosya yapısı
+Aşağıdaki şablonu kullanabilirsiniz:
 
-```text
-proje/
-├─ index.js
-├─ get-questions.js
-└─ data/
-   ├─ sorular.json
-   ├─ progress.json
-   └─ logs.json
+```env
+# GitHub API Entegrasyonu (Dataların Buluta Kayıt Olması İçin Zorunludur)
+GITHUB_TOKEN=ghp_kendi_sifreniz_buraya
+GITHUB_REPO=KullaniciAdi/RepoAdi
+
+# GitHub OAuth Login (Yönetici Paneli Koruması İçin - Opsiyonel)
+# GitHub > Developer Settings > OAuth Apps'ten uygulamanızı oluşturun.
+# Authorization callback URL: http://localhost:3000/auth/github/callback
+GITHUB_CLIENT_ID=olusturulan_id_buraya
+GITHUB_CLIENT_SECRET=olusturulan_gizli_anahtar_buraya
+ADMIN_GITHUB_USERNAME=yaso09
 ```
+> **Not:** Eğer GitHub OAuth (CLIENT_ID vb.) anahtarlarını `.env` içine girmezseniz, sistem korumalı (admin girişli) şifre ekranını tamamen es geçer ve "npm start" dediğiniz anda arayüze anonim erişim izni verir.
 
-Kod, `data` klasörünü yoksa otomatik oluşturur. fileciteturn0file0
+## 🖥️ Kullanım
 
-## Çekilen veriler
-
-Her başarılı kayıt şu alanlarla saklanır:
-
-```json
-{
-  "id": 123,
-  "question": "Soru metni",
-  "choices": ["A) ...", "B) ...", "C) ...", "D) ...", "E) ..."],
-  "answer": "C"
-}
-```
-
-Başarılı kayıtların listesi `sorular.json` içine yazılır. fileciteturn0file0
-
-## İlerleme takibi
-
-`progress.json` şu bilgileri tutar:
-
-- `lastSuccessId`: son başarılı ID,
-- `savedIds`: kaydedilmiş ID'ler,
-- `failedIds`: geçici olarak başarısız ID'ler,
-- `notFoundId`: ilk 404 görülen ID. fileciteturn0file0
-
-Bu yapı sayesinde program kapansa bile kaldığı yerden devam edebilir. fileciteturn0file0
-
-## Loglama
-
-`logs.json`, her ID için deneme bazlı log tutar. Her denemede:
-
-- zaman damgası,
-- adım adı,
-- başarı/başarısızlık işareti,
-- kısa detay açıklaması
-
-kaydedilir. Böylece hangi adımın neden başarısız olduğu sonradan incelenebilir. fileciteturn0file0
-
-## Çalışma akışı
-
-```mermaid
-flowchart TD
-    A[Başlat] --> B[progress.json, sorular.json, logs.json yükle]
-    B --> C[Önce failedIds listesini dene]
-    C --> D[20'lik yeni batch başlat]
-    D --> E[ID için HTML'i curl ile çek]
-    E --> F{HTML boş / 404 mi?}
-    F -- Evet --> G[notFoundId kaydet ve durdur]
-    F -- Hayır --> H[Soru metnini ayıkla]
-    H --> I[Şıkları ayıkla]
-    I --> J[Cevabı ayıkla]
-    J --> K{Soru + şıklar bulundu mu?}
-    K -- Hayır --> L[FAILED olarak logla, failedIds'e ekle]
-    K -- Evet --> M[sorular.json'a kaydet]
-    L --> N[Bir sonraki ID'ye geç]
-    M --> N
-    N --> O{Batch bitti mi?}
-    O -- Hayır --> E
-    O -- Evet --> P[Sonraki batch'e geç]
-    P --> C
-```
-
-## Ayrıntılı işlem diyagramı
-
-```mermaid
-sequenceDiagram
-    participant Main as main()
-    participant GK as getQuestions()
-    participant Curl as curl
-    participant Parser as parseQuestion()
-    participant FS as JSON dosyaları
-
-    Main->>GK: getQuestions()
-    GK->>FS: progress/data/logs yükle
-    loop Her ID
-        GK->>Curl: HTML isteği
-        Curl-->>GK: sayfa HTML'i
-        GK->>Parser: HTML'i ayrıştır
-        Parser-->>GK: OK / FAILED / NOT_FOUND
-        alt OK
-            GK->>FS: sorular.json + progress.json + logs.json kaydet
-        else FAILED
-            GK->>FS: failedIds + logs güncelle
-        else NOT_FOUND
-            GK->>FS: notFoundId kaydet
-            GK-->>Main: durdur
-        end
-    end
-```
-
-## Ayrıştırma mantığı
-
-Program HTML üzerinde üç ana kontrol yapar:
-
-1. Boş HTML kontrolü
-2. 404 kontrolü
-3. Soru / şık / cevap regex kontrolü fileciteturn0file0
-
-### Soru metni
-
-Soru bloğu şu kalıpla aranır:
-
-```js
-/<p class="question-item-ask">([\s\S]*?)(?=<div class="form-check">)/
-```
-
-Eğer eşleşme bulunursa HTML etiketleri temizlenir ve sade metin elde edilir. fileciteturn0file0
-
-### Şıklar
-
-Şıklar `d-flex` blokları içinde aranır ve `A)` ile `E)` formatındaki değerler filtrelenir. fileciteturn0file0
-
-### Cevap
-
-Doğru cevap şu regex ile alınır:
-
-```js
-/<span>\s*\d+\s*-\s*([A-E])/
-```
-
-### Başarı ölçütü
-
-Bir kaydın başarılı sayılması için en az:
-
-- soru,
-- bir veya daha fazla şık
-
-bulunmalıdır. Cevap bulunamazsa kayıt yine de eksik olarak loglanır, ancak `success` kontrolü soru ve şıklar üzerinden yapılır. fileciteturn0file0
-
-## Tekrar deneme mantığı
-
-Her ID için en fazla 3 deneme yapılır. Denemeler arasında 1 saniye beklenir. Başarısız olan ID'ler `failedIds` listesine eklenir ve sonraki döngüde yeniden denenir. Ayrıca batch sonrasında da bekleme süresi uygulanır. fileciteturn0file0
-
-Parametreler:
-
-```js
-START_ID = 1
-BATCH_SIZE = 20
-DELAY_MS = 2000
-retries = 3
-```
-
-## Çalıştırma
+Sunucuyu ve kontrol panelini ayağa kaldırmak için terminalinize gidin ve:
 
 ```bash
-node index.js
+npm start
 ```
+*Veya Node.js kullanarak `node src/index.js` komutunu uygulayabilirsiniz.*
 
-## Beklenen ortam
+Tarayıcınızdan uygulamaya geçin:
+👉 [http://localhost:3000](http://localhost:3000)
 
-- Node.js
-- `curl` komutu erişilebilir olmalı
+**Panelde Neler Var?**
+- GitHub sunucularında mevcut olan `sorular.json`, `progress.json` ve `logs.json` dosyalarınızın son *SHA-1 Hash* kimliklerini görebilirsiniz.
+- Anlık konsol kayıtları sekmesinden o saniye çekilen veya ulaşılamayan soruların durumunu inceleyebilirsiniz.
+- Taramayı sonlandırabilir, daha sonra kaldığı yerden veya başarısız olan (Eski Failed) URL'lerden tekrar başlatabilirsiniz.
 
-Program `child_process.execSync` ile `curl` çalıştırdığı için sistemde `curl` bulunması gerekir. fileciteturn0file0
-
-## Notlar
-
-- Program aynı ID'yi tekrar kaydetmemek için `savedIds` kontrolü yapar.
-- İlk 404 bulunduğunda tarama sonlandırılır.
-- Başarısız ID'ler bir sonraki turda yeniden denenir.
-- Ayrıştırma, sayfa HTML yapısına bağlıdır; HTML değişirse regex'ler güncellenmelidir. fileciteturn0file0
-
-## Kısa özet
-
-Bu proje, soru bankası sayfalarını sırayla dolaşan, içerik çıkaran, sonucu JSON'a yazan ve ilerlemeyi güvenli biçimde saklayan dayanıklı bir tarayıcıdır. Başarısız kayıtları tekrar denemesi ve ayrıntılı log tutması, toplu veri çekme senaryoları için pratik bir yapı sağlar. fileciteturn0file0
+---  
+*Geliştirilmiş kod onarımı ve modern mimarisi ile güçlü ve şık bir açık kaynak eğitim scraping projesidir.*

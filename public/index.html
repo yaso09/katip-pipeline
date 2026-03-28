@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Katip Pipeline Dashboard</title>
+    <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:wght@400;600&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #faf9f6;
+            --surface-color: #ffffff;
+            --primary: #2d3748;
+            --secondary: #718096;
+            --border: #e2e8f0;
+            --text-main: #1a202c;
+            --text-muted: #4a5568;
+            --danger: #e53e3e;
+            --success: #38a169;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-family: 'Inter', sans-serif;
+            font-weight: 400;
+        }
+
+        .dashboard {
+            background: var(--surface-color);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            width: 95%;
+            max-width: 1200px;
+            padding: 40px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.03);
+            margin: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 30px;
+        }
+
+        .main-content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 40px;
+        }
+
+        @media (max-width: 900px) {
+            .main-content {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .header {
+            text-align: left;
+            padding-bottom: 20px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .header h1 {
+            font-family: 'Crimson Pro', serif;
+            color: var(--primary);
+            font-size: 2.2rem;
+            font-weight: 600;
+        }
+
+        .left-col, .right-col {
+            display: flex;
+            flex-direction: column;
+            gap: 25px;
+        }
+
+        .status-card {
+            background: var(--bg-color);
+            padding: 15px 20px;
+            border-radius: 6px;
+            border: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+        }
+
+        .stat-box {
+            padding: 15px;
+            text-align: center;
+            border-radius: 6px;
+            background: var(--bg-color);
+            border: 1px solid var(--border);
+        }
+
+        .stat-box h2 {
+            font-size: 1.6rem;
+            font-family: 'Crimson Pro', serif;
+            color: var(--primary);
+        }
+
+        .stat-box p {
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            color: var(--secondary);
+            font-weight: 600;
+        }
+
+        .controls { display: flex; gap: 10px; }
+
+        .logs-container {
+            height: 500px;
+            overflow-y: auto;
+            background: var(--bg-color);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 15px;
+            font-family: monospace;
+            font-size: 0.8rem;
+            line-height: 1.6;
+        }
+
+        .logs-container::-webkit-scrollbar { width: 6px; }
+        .logs-container::-webkit-scrollbar-thumb { background: #cbd5e0; border-radius: 10px; }
+
+        .log-entry { margin-bottom: 4px; display: flex; gap: 10px; }
+        .log-time { color: var(--secondary); flex-shrink: 0; }
+        .log-error { color: var(--danger); }
+        .log-info { color: var(--text-main); }
+        
+        .logout {
+            display: block;
+            text-align: center;
+            margin-top: 25px;
+            color: var(--secondary);
+            text-decoration: none;
+            font-size: 0.85rem;
+            transition: color 0.2s;
+        }
+        .logout:hover { color: var(--danger); text-decoration: underline; }
+    </style>
+</head>
+<body>
+
+    <div class="dashboard">
+        <div class="header">
+            <h1>Katip Pipeline</h1>
+            <p>Eğitim Materyalleri Otonom Veri Aktarım Arayüzü</p>
+        </div>
+
+        <div class="main-content">
+            <div class="left-col">
+                <div class="status-container">
+                    <div class="status-card" id="statusCard">
+                        <span class="status-indicator" id="pulseIndicator"></span>
+                        <div class="status-info">
+                            <h3>Sistem Durumu</h3>
+                            <p id="statusMessage">Kontrol ediliyor...</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="stats-grid">
+                    <div class="stat-box">
+                        <h2 id="lastIdCount">0</h2>
+                        <p>Son ID</p>
+                    </div>
+                    <div class="stat-box">
+                        <h2 id="savedCount" style="color: var(--success);">0</h2>
+                        <p>Başarılı</p>
+                    </div>
+                    <div class="stat-box">
+                        <h2 id="failedCount" style="color: var(--danger);">0</h2>
+                        <p>Bekleyen Hata</p>
+                    </div>
+                </div>
+
+                <div class="controls">
+                    <button id="startBtn" onclick="startPipeline()">Sistemi Başlat</button>
+                    <button id="stopBtn" onclick="stopPipeline()" disabled>Durdur</button>
+                </div>
+
+                <div class="info-section" style="margin-top: 0;">
+                    <h3 class="section-title">En Son GitHub Senkronizasyonu (SHA)</h3>
+                    <div class="shas-container" id="shasContainer">
+                        <p>Veri Bekleniyor...</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="right-col">
+                <div class="info-section" style="margin-top: 0; height: 100%;">
+                    <h3 class="section-title">İşlem Günlüğü</h3>
+                    <div class="logs-container" id="logsContainer">
+                        <div class="log-entry"><span class="log-info">Kayıt bulunamadı.</span></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <a href="/logout" class="logout">Oturumu Kapat (Çıkış)</a>
+    </div>
+
+    <script>
+        const startBtn = document.getElementById('startBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const statusMessage = document.getElementById('statusMessage');
+        const pulseIndicator = document.getElementById('pulseIndicator');
+        const statusCard = document.getElementById('statusCard');
+        
+        const lastIdCount = document.getElementById('lastIdCount');
+        const savedCount = document.getElementById('savedCount');
+        const failedCount = document.getElementById('failedCount');
+        
+        const shasContainer = document.getElementById('shasContainer');
+        const logsContainer = document.getElementById('logsContainer');
+
+        async function fetchStatus() {
+            try {
+                const res = await fetch('/api/status');
+                if (!res.ok) {
+                    if (res.status === 401) window.location.href = '/login';
+                    return;
+                }
+                const data = await res.json();
+                
+                statusMessage.textContent = data.message;
+                lastIdCount.textContent = data.lastId;
+                savedCount.textContent = data.savedCount;
+                failedCount.textContent = data.failedCount + data.retryQueueLength;
+
+                if (data.active) {
+                    startBtn.disabled = true;
+                    stopBtn.disabled = false;
+                    pulseIndicator.classList.add('active');
+                } else {
+                    startBtn.disabled = false;
+                    stopBtn.disabled = true;
+                    pulseIndicator.classList.remove('active');
+                }
+
+                if (data.fileShas) {
+                    shasContainer.innerHTML = `
+                        <p><span>sorular.json</span> <span class="hash">${data.fileShas.data || 'Bekleniyor...'}</span></p>
+                        <p><span>progress.json</span> <span class="hash">${data.fileShas.progress || 'Bekleniyor...'}</span></p>
+                        <p><span>logs.json</span> <span class="hash">${data.fileShas.logs || 'Bekleniyor...'}</span></p>
+                    `;
+                }
+
+                if (data.logHistory && data.logHistory.length > 0) {
+                    logsContainer.innerHTML = data.logHistory.map(log => {
+                        const className = log.type === 'error' ? 'log-error' : 'log-info';
+                        return `<div class="log-entry"><span class="log-time">[${log.time}]</span><span class="${className}">${log.msg}</span></div>`;
+                    }).join('');
+                }
+            } catch (err) {
+                statusMessage.textContent = "Bağlantı hatası!";
+                pulseIndicator.classList.remove('active');
+            }
+        }
+
+        async function startPipeline() {
+            startBtn.disabled = true;
+            statusMessage.textContent = "Başlatma komutu gönderildi...";
+            await fetch('/api/start', { method: 'POST' });
+            fetchStatus();
+        }
+
+        async function stopPipeline() {
+            stopBtn.disabled = true;
+            statusMessage.textContent = "Durduruluyor (Mevcut işlem bitiyor)...";
+            await fetch('/api/stop', { method: 'POST' });
+        }
+
+        setInterval(fetchStatus, 1500);
+        fetchStatus();
+    </script>
+</body>
+</html>

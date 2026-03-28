@@ -1,6 +1,23 @@
 const fs = require("fs");
 const path = require("path");
-const { execSync } = require("child_process");
+const axios = require("axios");
+
+// .env dosyasını yükle
+const envPath = path.join(__dirname, "..", "..", ".env");
+if (fs.existsSync(envPath)) {
+  const envContent = fs.readFileSync(envPath, "utf-8");
+  envContent.split(/\r?\n/).forEach(line => {
+    const match = line.match(/^\s*([\w.-]+)\s*=\s*(.*)?\s*$/);
+    if (match) {
+      const key = match[1];
+      let value = match[2] || "";
+      if (value.startsWith('"') && value.endsWith('"')) {
+        value = value.slice(1, -1);
+      }
+      process.env[key] = value;
+    }
+  });
+}
 
 // Ayarlar
 const START_ID = 1;
@@ -11,13 +28,49 @@ const DELAY_MS = 2000;
 const BASE_URL = "https://ogmmateryal.eba.gov.tr/soru-bankasi/test-yazdir?id=";
 
 // Dosyalar
-const DATA_FILE = path.join(__dirname, "data", "sorular.json");
-const PROGRESS_FILE = path.join(__dirname, "data", "progress.json");
-const LOG_FILE = path.join(__dirname, "data", "logs.json");
+const DATA_DIR = path.join(__dirname, "..", "..", "ogm_materyal");
+const DATA_FILE = path.join(DATA_DIR, "sorular.json");
+const PROGRESS_FILE = path.join(DATA_DIR, "progress.json");
+const LOG_FILE = path.join(DATA_DIR, "logs.json");
 
 // klasör oluştur
-const DATA_DIR = path.join(__dirname, "data");
-if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+if (!process.env.GITHUB_TOKEN || !process.env.GITHUB_REPO) {
+  if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+}
+
+const fileShas = {
+  data: null,
+  progress: null,
+  logs: null
+};
+
+const logHistory = [];
+const originalLog = console.log;
+const originalError = console.error;
+
+console.log = function(...args) {
+  const msg = args.join(" ");
+  logHistory.unshift({ time: new Date().toLocaleTimeString('tr-TR'), msg, type: 'info' });
+  if (logHistory.length > 50) logHistory.pop();
+  originalLog.apply(console, args);
+};
+
+console.error = function(...args) {
+  const msg = args.join(" ");
+  logHistory.unshift({ time: new Date().toLocaleTimeString('tr-TR'), msg, type: 'error' });
+  if (logHistory.length > 50) logHistory.pop();
+  originalError.apply(console, args);
+};
+
+let isRunning = false;
+let statusObj = {
+  active: false,
+  message: "Sistem kapalı. Başlatılması bekleniyor.",
+  lastId: 0,
+  savedCount: 0,
+  failedCount: 0,
+  retryQueueLength: 0
+};
 
 // delay
 function delay(ms) {
@@ -25,51 +78,218 @@ function delay(ms) {
 }
 
 // progress yükle
-function loadProgress() {
-  if (!fs.existsSync(PROGRESS_FILE)) {
-    return {
-      lastSuccessId: 0,
-      savedIds: [],
-      failedIds: [],
-      notFoundId: null
-    };
+async function loadProgress() {
+  const token = process.env.GITHUB_TOKEN;
+  const repo = process.env.GITHUB_REPO;
+  const filePath = "ogm_materyal/progress.json";
+
+  if (!token || !repo) {
+    if (!fs.existsSync(PROGRESS_FILE)) {
+      return { lastSuccessId: 0, savedIds: [], failedIds: [], notFoundId: null };
+    }
+    return JSON.parse(fs.readFileSync(PROGRESS_FILE, "utf-8"));
   }
-  return JSON.parse(fs.readFileSync(PROGRESS_FILE, "utf-8"));
+
+  const url = `https://api.github.com/repos/${repo}/contents/${filePath}`;
+  try {
+    const res = await axios.get(url, {
+      headers: { "Authorization": `token ${token}`, "Accept": "application/vnd.github.v3+json", "User-Agent": "katip-pipeline" }
+    });
+    if (res.status === 200) {
+      const json = res.data;
+      fileShas.progress = json.sha;
+      return JSON.parse(Buffer.from(json.content, "base64").toString("utf-8"));
+    }
+  } catch (err) {}
+  
+  return { lastSuccessId: 0, savedIds: [], failedIds: [], notFoundId: null };
 }
 
 // progress kaydet
-function saveProgress(progress) {
-  fs.writeFileSync(PROGRESS_FILE, JSON.stringify(progress, null, 2));
+async function saveProgress(progress, message = "Progress güncellendi") {
+  const token = process.env.GITHUB_TOKEN;
+  const repo = process.env.GITHUB_REPO;
+  const filePath = "ogm_materyal/progress.json";
+
+  if (!token || !repo) {
+    fs.writeFileSync(PROGRESS_FILE, JSON.stringify(progress, null, 2));
+    return;
+  }
+
+  const url = `https://api.github.com/repos/${repo}/contents/${filePath}`;
+  const body = {
+    message: message,
+    content: Buffer.from(JSON.stringify(progress, null, 2)).toString("base64")
+  };
+  if (fileShas.progress) body.sha = fileShas.progress;
+
+  try {
+    const putRes = await axios.put(url, body, {
+      headers: { "Authorization": `token ${token}`, "Accept": "application/vnd.github.v3+json", "Content-Type": "application/json", "User-Agent": "katip-pipeline" }
+    });
+    if (putRes.status === 200 || putRes.status === 201) {
+      fileShas.progress = putRes.data.content.sha;
+    }
+  } catch (err) {
+    if (err.response && err.response.status === 409) {
+      console.log(`⚠️ (Progress) 409 Conflict tetiklendi. Ağdaki gecikmelerden dolayı SHA uyuşmazlığı oldu. Yeni SHA alınıyor...`);
+      try {
+        const getRes = await axios.get(url + `?t=${Date.now()}`, {
+          headers: { "Authorization": `token ${token}`, "User-Agent": "katip-pipeline", "Cache-Control": "no-store" }
+        });
+        if (getRes.status === 200) fileShas.progress = getRes.data.sha;
+      } catch (e) {}
+    }
+  }
 }
 
 // data yükle
-function loadData() {
-  if (!fs.existsSync(DATA_FILE)) return [];
-  return JSON.parse(fs.readFileSync(DATA_FILE, "utf-8"));
+async function loadData() {
+  const token = process.env.GITHUB_TOKEN;
+  const repo = process.env.GITHUB_REPO;
+  const filePath = "ogm_materyal/sorular.json";
+
+  if (!token || !repo) {
+    if (!fs.existsSync(DATA_FILE)) return [];
+    return JSON.parse(fs.readFileSync(DATA_FILE, "utf-8"));
+  }
+
+  const url = `https://api.github.com/repos/${repo}/contents/${filePath}`;
+  try {
+    const res = await axios.get(url, {
+      headers: { "Authorization": `token ${token}`, "Accept": "application/vnd.github.v3+json", "User-Agent": "katip-pipeline" }
+    });
+    if (res.status === 200) {
+      const json = res.data;
+      fileShas.data = json.sha;
+      return JSON.parse(Buffer.from(json.content, "base64").toString("utf-8"));
+    }
+  } catch (err) {
+    if (err.response && err.response.status !== 404) {
+      console.error("⚠️ GitHub'dan veri alınamadı:", err.response.data);
+    } else if (!err.response) {
+      console.error("⚠️ GitHub isteği başarısız oldu:", err.message);
+    }
+  }
+  return [];
 }
 
 // data kaydet
-function saveData(data) {
-  fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
+async function saveData(data, message = "Sorular güncellendi") {
+  const token = process.env.GITHUB_TOKEN;
+  const repo = process.env.GITHUB_REPO;
+  const filePath = "ogm_materyal/sorular.json";
+
+  if (!token || !repo) {
+    fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
+    return;
+  }
+
+  const url = `https://api.github.com/repos/${repo}/contents/${filePath}`;
+  const body = {
+    message: message,
+    content: Buffer.from(JSON.stringify(data, null, 2)).toString("base64")
+  };
+  if (fileShas.data) body.sha = fileShas.data;
+
+  try {
+    const putRes = await axios.put(url, body, {
+      headers: { "Authorization": `token ${token}`, "Accept": "application/vnd.github.v3+json", "Content-Type": "application/json", "User-Agent": "katip-pipeline" }
+    });
+    
+    if (putRes.status === 200 || putRes.status === 201) {
+      fileShas.data = putRes.data.content.sha;
+    }
+  } catch (err) {
+    if (err.response) {
+      const status = err.response.status;
+      console.error(`❌ Soruları GitHub'a kaydederken hata (${status}):`, err.response.data);
+      if (status === 409) {
+        console.log(`⚠️ (Data) 409 Conflict tetiklendi. Yeni SHA alınıyor...`);
+        try {
+          const getRes = await axios.get(url + `?t=${Date.now()}`, {
+            headers: { "Authorization": `token ${token}`, "User-Agent": "katip-pipeline", "Cache-Control": "no-store" }
+          });
+          if (getRes.status === 200) fileShas.data = getRes.data.sha;
+        } catch (e) {}
+      }
+    } else {
+      console.error("❌ GitHub API isteği başarısız oldu:", err.message);
+    }
+  }
 }
 
 // log yükle
-function loadLogs() {
-  if (!fs.existsSync(LOG_FILE)) return {};
-  return JSON.parse(fs.readFileSync(LOG_FILE, "utf-8"));
+async function loadLogs() {
+  const token = process.env.GITHUB_TOKEN;
+  const repo = process.env.GITHUB_REPO;
+  const filePath = "ogm_materyal/logs.json";
+
+  if (!token || !repo) {
+    if (!fs.existsSync(LOG_FILE)) return {};
+    return JSON.parse(fs.readFileSync(LOG_FILE, "utf-8"));
+  }
+
+  const url = `https://api.github.com/repos/${repo}/contents/${filePath}`;
+  try {
+    const res = await axios.get(url, {
+      headers: { "Authorization": `token ${token}`, "Accept": "application/vnd.github.v3+json", "User-Agent": "katip-pipeline" }
+    });
+    if (res.status === 200) {
+      const json = res.data;
+      fileShas.logs = json.sha;
+      return JSON.parse(Buffer.from(json.content, "base64").toString("utf-8"));
+    }
+  } catch (err) {}
+  
+  return {};
 }
 
 // log kaydet
-function saveLogs(logs) {
-  fs.writeFileSync(LOG_FILE, JSON.stringify(logs, null, 2));
+async function saveLogs(logs, message = "Logs güncellendi") {
+  const token = process.env.GITHUB_TOKEN;
+  const repo = process.env.GITHUB_REPO;
+  const filePath = "ogm_materyal/logs.json";
+
+  if (!token || !repo) {
+    fs.writeFileSync(LOG_FILE, JSON.stringify(logs, null, 2));
+    return;
+  }
+
+  const url = `https://api.github.com/repos/${repo}/contents/${filePath}`;
+  const body = {
+    message: message,
+    content: Buffer.from(JSON.stringify(logs, null, 2)).toString("base64")
+  };
+  if (fileShas.logs) body.sha = fileShas.logs;
+
+  try {
+    const putRes = await axios.put(url, body, {
+      headers: { "Authorization": `token ${token}`, "Accept": "application/vnd.github.v3+json", "Content-Type": "application/json", "User-Agent": "katip-pipeline" }
+    });
+    if (putRes.status === 200 || putRes.status === 201) {
+      fileShas.logs = putRes.data.content.sha;
+    }
+  } catch (err) {
+    if (err.response && err.response.status === 409) {
+      try {
+        const getRes = await axios.get(url + `?t=${Date.now()}`, {
+          headers: { "Authorization": `token ${token}`, "User-Agent": "katip-pipeline", "Cache-Control": "no-store" }
+        });
+        if (getRes.status === 200) fileShas.logs = getRes.data.sha;
+      } catch (e) {}
+    }
+  }
 }
 
-// curl ile HTML çek
-function fetchHTMLCurl(id) {
+// axios ile HTML çek
+async function fetchHTML(id) {
   try {
-    const cmd = `curl -s -A "curl/7.88.1" "${BASE_URL + id}"`;
-    const html = execSync(cmd, { timeout: 15000 }).toString();
-    return html;
+    const res = await axios.get(BASE_URL + id, {
+      headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64 AppleWebKit/537.36)" },
+      timeout: 15000
+    });
+    return res.data;
   } catch (err) {
     return err.message || null;
   }
@@ -158,7 +378,7 @@ function parseQuestion(html, id) {
 // retry mantığı
 async function fetchWithRetry(id, retries = 3, logs) {
   for (let i = 0; i < retries; i++) {
-    const html = fetchHTMLCurl(id);
+    const html = await fetchHTML(id);
     const parsed = parseQuestion(html, id);
 
     // Her denemede logu kaydet
@@ -176,16 +396,24 @@ async function fetchWithRetry(id, retries = 3, logs) {
 
 // ana fonksiyon
 async function getQuestions() {
-  let progress = loadProgress();
-  let data = loadData();
-  let logs = loadLogs();
+  statusObj.message = "Veriler GitHub'dan güvenle çekiliyor...";
+  let progress = await loadProgress();
+  let data = await loadData();
+  let logs = await loadLogs();
   let currentId = progress.lastSuccessId + 1;
+  
+  statusObj.savedCount = progress.savedIds.length;
+  statusObj.failedCount = progress.failedIds.length;
+  statusObj.lastId = progress.lastSuccessId;
 
-  while (true) {
+  while (isRunning) {
+    statusObj.message = "Veri işleme döngüsü çalışıyor...";
     // eski failedId'leri tekrar dene
     let retryIds = [...progress.failedIds];
     progress.failedIds = [];
-    saveProgress(progress);
+    statusObj.retryQueueLength = retryIds.length;
+    
+    await saveProgress(progress, `Retry batch öncesi progress temizliği`);
 
     if (retryIds.length > 0) {
       console.log(`\n♻️  Eski başarısız ID’leri tekrar deniyoruz: ${retryIds.join(", ")}`);
@@ -197,24 +425,31 @@ async function getQuestions() {
         if (result === "NOT_FOUND") {
           console.log("🛑 404 bulundu, durduruluyor.");
           progress.notFoundId = id;
-          saveProgress(progress);
-          saveLogs(logs);
+          await Promise.all([
+            saveProgress(progress, `ID ${id} (404) işlendi`),
+            saveLogs(logs, `ID ${id} (404) logları eklendi`)
+          ]);
           return;
         }
 
         if (result === "FAILED") {
           console.log(`⚠️ Yine başarısız: ${id}`);
           progress.failedIds.push(id);
+          statusObj.failedCount++;
         } else {
           console.log(`✅ Kaydedildi: ${id}`);
           data.push(result);
           progress.savedIds.push(id);
           progress.lastSuccessId = id;
+          statusObj.savedCount++;
+          statusObj.lastId = id;
         }
 
-        saveData(data);
-        saveProgress(progress);
-        saveLogs(logs);
+        await Promise.all([
+          saveData(data, `Soru ID ${id} eklendi`),
+          saveProgress(progress, `Soru ID ${id} işlendi`),
+          saveLogs(logs, `Soru ID ${id} logları eklendi`)
+        ]);
         await delay(DELAY_MS);
       }
     }
@@ -230,24 +465,31 @@ async function getQuestions() {
       if (result === "NOT_FOUND") {
         console.log("🛑 404 bulundu, durduruluyor.");
         progress.notFoundId = id;
-        saveProgress(progress);
-        saveLogs(logs);
+        await Promise.all([
+          saveProgress(progress, `ID ${id} (404) işlendi`),
+          saveLogs(logs, `ID ${id} (404) logları eklendi`)
+        ]);
         return;
       }
 
       if (result === "FAILED") {
         console.log(`⚠️ Başarısız: ${id}`);
         progress.failedIds.push(id);
+        statusObj.failedCount++;
       } else {
         console.log(`✅ Kaydedildi: ${id}`);
         data.push(result);
         progress.savedIds.push(id);
         progress.lastSuccessId = id;
+        statusObj.savedCount++;
+        statusObj.lastId = id;
       }
 
-      saveData(data);
-      saveProgress(progress);
-      saveLogs(logs);
+      await Promise.all([
+        saveData(data, `Soru ID ${id} eklendi`),
+        saveProgress(progress, `Soru ID ${id} işlendi`),
+        saveLogs(logs, `Soru ID ${id} logları eklendi`)
+      ]);
       await delay(DELAY_MS);
     }
 
@@ -255,4 +497,32 @@ async function getQuestions() {
   }
 }
 
-module.exports = { getQuestions };
+async function startPipeline() {
+  if (isRunning) return;
+  isRunning = true;
+  statusObj.active = true;
+  statusObj.message = "Başlatılıyor...";
+  try {
+    await getQuestions();
+  } catch (err) {
+    statusObj.message = "Hata oluştu: " + err.message;
+  }
+  isRunning = false;
+  statusObj.active = false;
+  if (statusObj.message !== "Durduruldu") statusObj.message = "Sistem durdu";
+}
+
+function stopPipeline() {
+  isRunning = false;
+  statusObj.message = "Durduruluyor... (Mevcut işlem bittiğinde tamamen duracak)";
+}
+
+function getPipelineStatus() {
+  return {
+    ...statusObj,
+    logHistory,
+    fileShas
+  };
+}
+
+module.exports = { getQuestions, startPipeline, stopPipeline, getPipelineStatus };
