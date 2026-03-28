@@ -1,61 +1,72 @@
 # 📚 Katip Pipeline
 
-**Eğitim Materyalleri Otonom Veri Aktarım Sistemine Hoş Geldiniz!**
+MEB OGM Materyal soru bankasındaki içerikleri otonom olarak (web scraping) çeken ve doğrudan GitHub deponuza senkronize eden, modern arayüzlü ve güvenli veri hattı (pipeline).
 
-Katip Pipeline, Türkiye Cumhuriyeti Milli Eğitim Bakanlığı (MEB) kaynaklarından –özellikle OGM Materyal üzerinden– akademik içerikleri ve test bankası sorularını otonom olarak (web scraping ile) çeken ve doğrudan GitHub deponuza senkronize eden modern bir Node.js sistemidir.
+## 🌟 Öne Çıkan Özellikler
 
-## ✨ Öne Çıkan Özellikler
+- ☁️ **Tamamen Bulut Tabanlı:** Yerel diskte yer kaplamaz; tüm veriler, ilerleme durumu (progress) ve günlükler doğrudan GitHub API üzerinden senkronize edilir.
+- 🎨 **Akademik Dashboard:** "Crimson Pro" ve "Inter" fontlarıyla tasarlanmış, makale dizgisi zarafetinde modern ve minimalist yönetim paneli.
+- 🛡️ **GitHub OAuth2 Güvenliği:** Paneliniz tamamen korumalıdır. Sadece sizin belirlediğiniz GitHub yetkilisi giriş yapabilir.
+- ⚡ **Axios ile Güçlü Altyapı:** Native fetch ve curl bağımlılıkları yerine profesyonel Axios kütüphanesi ile daha stabil bağlantı ve hata yönetimi.
+- 🔄 **409 Conflict Kurtarma:** GitHub API'deki SHA uyuşmazlığı hatalarını otomatik algılar ve veri kaybı olmadan senkronizasyonu sürdürür.
+- 🚀 **Vercel Uyumlu:** Sunucusuz (serverless) ortamlarda çalışması için dosya sistemi yazma izinlerine ihtiyaç duymaz.
 
-- ☁️ **"Sıfır" Veri Kaybı ve Doğrudan GitHub Senkronizasyonu:** Yerel disk yerine GitHub REST API'sini kullanan akıllı `sha` önbelleği (Caching) sayesinde **409 Conflict** hataları onarılmıştır. Tüm asenkron süreçler `Promise.all` ile saniye kaybetmeden asenkron çalışır ve sunucu (GitHub) API limitlerini aşmadan senkronizasyon sağlar.
-- 🇹🇷 **Native Fetch ile Kesin Encoding (Türkçe Desteği):** Türkçe karakterleri (windows-1254 vb.) sorunsuz çekip dönüştürebilmek için yavaş ve sorunlu konsol `curl` bağımlılığı kaldırılmış, doğrudan sistem çekirdeğindeki Native `fetch` yapısına geçirilmiştir. Sorularınızda bozuk karakter yaşanmaz.
-- 🎨 **Akademik & Minimalist "Dashboard" (Kontrol Paneli):** `Express.js` altyapısında sunulan arayüzümüz; göz yormayan açık kağıt hissiyatı, Crimson Pro serif stili (makale dizgisi) hissi ile terminal pencerelerine ihtiyacı ortadan kaldırır. "Durdur/Başlat" fonksiyonlarına tam yetkilidir.
-- 🛡️ **GitHub OAuth2 Yönetici Koruması:** Web arayüzünüz tamamen size aittir. `passport-github2` ile şifrelenen web sunucusuna sadece `.env` içerisinde belirlediğiniz tek veya belirli bir "Yönetici (Admin)" kullanıcı adı dışında hiçbir GitHub hesabı erişemez. Projeniz güvendedir!
+## ⚙️ Hızlı Kurulum
 
-## 🚀 Kurulum
+1.  Projeyi klonlayın ve bağımlılıkları yükleyin:
+    ```bash
+    npm install
+    ```
+2.  `.env` dosyanızı oluşturun (detaylar aşağıda).
+3.  Uygulamayı başlatın:
+    ```bash
+    npm start
+    ```
+4.  Tarayıcıdan erişin: `http://localhost:3000`
 
-1. Depoyu bilgisayarınıza / sunucunuza aktarın.
-2. Gerekli kütüphaneleri (Express.js, Passport vs.) yükleyin:
-   ```bash
-   npm install
-   ```
-3. Ayar dosyasını (`.env`) kendi bilgilerinize göre oluşturun.
+---
 
-## ⚙️ Yapılandırma (`.env` Dosyası)
+## 🛠️ GitHub OAuth Uygulaması Oluşturma (Adım Adım)
 
-Projenizin ana dizinine bir adet `.env` dosyası oluşturun (veya mevcut `.env.example` isimli dosyayı kopyalayın).
+Yönetici panelini güvenli hale getirmek için bir GitHub OAuth uygulamasına ihtiyacınız vardır:
 
-Aşağıdaki şablonu kullanabilirsiniz:
+1.  GitHub hesabınızda **Settings > Developer Settings > OAuth Apps** yolunu izleyin.
+2.  **"New OAuth App"** butonuna tıklayın.
+3.  Aşağıdaki bilgileri doldurun:
+    - **Application Name:** Katip Pipeline (veya dilediğiniz bir isim)
+    - **Homepage URL:** Bilgisayarda test ediyorsanız `http://localhost:3000`, Vercel'deyseniz kendi linkiniz (örn: `https://katip-pipeline.vercel.app`).
+    - **Authorization callback URL:** Bilgisayar için `http://localhost:3000/auth/github/callback`, Vercel için `https://...vercel.app/auth/github/callback`.
+4.  **"Register application"** dedikten sonra **"Client ID"**yi kopyalayın.
+5.  **"Generate a new client secret"** butonuna basarak gizli anahtarı oluşturun ve kopyalayın.
+6.  Bu bilgileri `.env` dosyanızdaki ilgili kısımlara yapıştırın.
 
-```env
-# GitHub API Entegrasyonu (Dataların Buluta Kayıt Olması İçin Zorunludur)
-GITHUB_TOKEN=ghp_kendi_sifreniz_buraya
-GITHUB_REPO=KullaniciAdi/RepoAdi
+---
 
-# GitHub OAuth Login (Yönetici Paneli Koruması İçin - Opsiyonel)
-# GitHub > Developer Settings > OAuth Apps'ten uygulamanızı oluşturun.
-# Authorization callback URL: http://localhost:3000/auth/github/callback
-GITHUB_CLIENT_ID=olusturulan_id_buraya
-GITHUB_CLIENT_SECRET=olusturulan_gizli_anahtar_buraya
-ADMIN_GITHUB_USERNAME=yaso09
-```
-> **Not:** Eğer GitHub OAuth (CLIENT_ID vb.) anahtarlarını `.env` içine girmezseniz, sistem korumalı (admin girişli) şifre ekranını tamamen es geçer ve "npm start" dediğiniz anda arayüze anonim erişim izni verir.
+## 🔑 Ortam Değişkenleri (.env)
 
-## 🖥️ Kullanım
+| Değişken | Açıklama | Örnek / Durum |
+| :--- | :--- | :--- |
+| `GITHUB_TOKEN` | GitHub API erişim anahtarınız (fine-grained veya classic). | `ghp_...` |
+| `GITHUB_REPO` | Verilerin kaydedileceği depo. | `Kullanici/DepoAdi` |
+| `GITHUB_CLIENT_ID` | Oluşturduğunuz OAuth uygulamasının ID'si. | `Ov23...` |
+| `GITHUB_CLIENT_SECRET` | Oluşturduğunuz OAuth uygulamasının gizli anahtarı. | `31d9...` |
+| `ADMIN_GITHUB_USERNAME` | Paneli yönetmeye yetkili tek GitHub kullanıcı adınız. | `yaso09` |
+| `APP_URL` | (Opsiyonel) Vercel'de özel domain kullanıyorsanız adresi. | `https://site.com` |
 
-Sunucuyu ve kontrol panelini ayağa kaldırmak için terminalinize gidin ve:
+---
 
-```bash
-npm start
-```
-*Veya Node.js kullanarak `node src/index.js` komutunu uygulayabilirsiniz.*
+## 🚀 Vercel Üzerinde Yayınlama
 
-Tarayıcınızdan uygulamaya geçin:
-👉 [http://localhost:3000](http://localhost:3000)
+Bu proje Vercel ile tam uyumludur:
+1.  GitHub deponuzu Vercel'e bağlayın.
+2.  Vercel Dashboard'da **Environment Variables** kısmına yukarıdaki tüm `.env` değişkenlerini tek tek ekleyin.
+3.  Deploy edin. Dinamik URL yapısı sayesinde callback adresiniz otomatik algılanacaktır.
 
-**Panelde Neler Var?**
-- GitHub sunucularında mevcut olan `sorular.json`, `progress.json` ve `logs.json` dosyalarınızın son *SHA-1 Hash* kimliklerini görebilirsiniz.
-- Anlık konsol kayıtları sekmesinden o saniye çekilen veya ulaşılamayan soruların durumunu inceleyebilirsiniz.
-- Taramayı sonlandırabilir, daha sonra kaldığı yerden veya başarısız olan (Eski Failed) URL'lerden tekrar başlatabilirsiniz.
+## 🖥️ Arayüz Kullanımı
 
----  
-*Geliştirilmiş kod onarımı ve modern mimarisi ile güçlü ve şık bir açık kaynak eğitim scraping projesidir.*
+- **Sol Sütun:** Sistem durumunu anlık izleyebilir, toplam başarılı/hatalı soru sayısını görebilir ve GitHub'daki dosyalarınızın son durumlarını (SHA) takip edebilirsiniz.
+- **Sağ Sütun:** "İşlem Günlüğü" kısmından arka planda akıp giden scrap loglarını, çekilen soruların ID'lerini canlı olarak izleyebilirsiniz.
+- **Durdur/Başlat:** İstediğiniz an işlemi durdurabilir, kaldığı yerden devam ettirebilirsiniz.
+
+---
+*Gelişmiş eğitim teknolojileri veri akışı projeleri için tasarlanmıştır.*

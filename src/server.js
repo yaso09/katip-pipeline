@@ -22,22 +22,22 @@ if (fs.existsSync(envPath)) {
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const ADMIN_USERNAME = process.env.ADMIN_GITHUB_USERNAME || 'yaso09';
+const ADMIN_USERNAME = process.env.ADMIN_GITHUB_USERNAME;
 
 passport.serializeUser((user, done) => done(null, user));
 passport.deserializeUser((obj, done) => done(null, obj));
 
-  // Dinamik Callback URL: Öncelik APP_URL'de, yoksa Vercel URL'i, o da yoksa localhost.
-  const protocol = (process.env.NODE_ENV === 'production' || process.env.VERCEL_URL) ? 'https' : 'http';
-  const domain = process.env.APP_URL || (process.env.VERCEL_URL ? `${protocol}://${process.env.VERCEL_URL}` : `${protocol}://localhost:${PORT}`);
-  const callbackURL = domain.endsWith('/') ? `${domain}auth/github/callback` : `${domain}/auth/github/callback`;
+// Dinamik Callback URL: Öncelik APP_URL'de, yoksa Vercel URL'i, o da yoksa localhost.
+const protocol = (process.env.NODE_ENV === 'production' || process.env.VERCEL_URL) ? 'https' : 'http';
+const domain = process.env.APP_URL || (process.env.VERCEL_URL ? `${protocol}://${process.env.VERCEL_URL}` : `${protocol}://localhost:${PORT}`);
+const callbackURL = domain.endsWith('/') ? `${domain}auth/github/callback` : `${domain}/auth/github/callback`;
 
 passport.use(new GitHubStrategy({
-    clientID: process.env.GITHUB_CLIENT_ID || 'dummy_id',
-    clientSecret: process.env.GITHUB_CLIENT_SECRET || 'dummy_secret',
-    callbackURL: callbackURL
-  },
-  function(accessToken, refreshToken, profile, done) {
+  clientID: process.env.GITHUB_CLIENT_ID || 'dummy_id',
+  clientSecret: process.env.GITHUB_CLIENT_SECRET || 'dummy_secret',
+  callbackURL: callbackURL
+},
+  function (accessToken, refreshToken, profile, done) {
     if (profile.username !== ADMIN_USERNAME) {
       return done(null, false, { message: 'Sadece yetkili admin bu panele erişebilir.' });
     }
@@ -52,7 +52,7 @@ app.use(passport.session());
 // Giriş Ekranı (Public)
 app.get('/login', (req, res) => {
   if (req.isAuthenticated()) return res.redirect('/');
-  
+
   res.send(`
     <!DOCTYPE html>
     <html lang="tr">
@@ -83,11 +83,11 @@ app.get('/login', (req, res) => {
 });
 
 // Auth Routes
-app.get('/auth/github', passport.authenticate('github', { scope: [ 'user:email' ] }));
+app.get('/auth/github', passport.authenticate('github', { scope: ['user:email'] }));
 
-app.get('/auth/github/callback', 
+app.get('/auth/github/callback',
   passport.authenticate('github', { failureRedirect: '/login' }),
-  function(req, res) {
+  function (req, res) {
     res.redirect('/');
   }
 );
@@ -99,15 +99,15 @@ app.get('/logout', (req, res) => {
 // Middleware
 function ensureAuthenticated(req, res, next) {
   // Eğer GitHub Client ID henüz yoksa, test için korumayı es geç (Opsiyonel ama mantıklı)
-  if (process.env.GITHUB_CLIENT_ID === 'dummy_id' || !process.env.GITHUB_CLIENT_ID) return next(); 
-  
+  if (process.env.GITHUB_CLIENT_ID === 'dummy_id' || !process.env.GITHUB_CLIENT_ID) return next();
+
   if (req.isAuthenticated()) return next();
-  
+
   // API route'unda isek 401 dön, normal sayfada isek redirect yap
   if (req.path.startsWith('/api/')) {
-      res.status(401).json({ error: "Unauthorized" });
+    res.status(401).json({ error: "Unauthorized" });
   } else {
-      res.redirect('/login');
+    res.redirect('/login');
   }
 }
 
@@ -122,7 +122,7 @@ app.get('/api/status', (req, res) => {
 });
 
 app.post('/api/start', (req, res) => {
-  startPipeline(); 
+  startPipeline();
   res.json({ success: true, message: "Sistem başlatılıyor..." });
 });
 
