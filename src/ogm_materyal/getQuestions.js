@@ -27,16 +27,10 @@ const DELAY_MS = 2000;
 // URL
 const BASE_URL = "https://ogmmateryal.eba.gov.tr/soru-bankasi/test-yazdir?id=";
 
-// Dosyalar
-const DATA_DIR = path.join(__dirname, "..", "..", "ogm_materyal");
-const DATA_FILE = path.join(DATA_DIR, "sorular.json");
-const PROGRESS_FILE = path.join(DATA_DIR, "progress.json");
-const LOG_FILE = path.join(DATA_DIR, "logs.json");
-
-// klasör oluştur
-if (!process.env.GITHUB_TOKEN || !process.env.GITHUB_REPO) {
-  if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-}
+// Veri yolu tanımları (Log vb. yerel fallback kaldırıldı, sadece GitHub kullanılıyor)
+const PROGRESS_FILE_PATH = "ogm_materyal/progress.json";
+const DATA_FILE_PATH = "ogm_materyal/sorular.json";
+const LOG_FILE_PATH = "ogm_materyal/logs.json";
 
 const fileShas = {
   data: null,
@@ -81,16 +75,13 @@ function delay(ms) {
 async function loadProgress() {
   const token = process.env.GITHUB_TOKEN;
   const repo = process.env.GITHUB_REPO;
-  const filePath = "ogm_materyal/progress.json";
 
   if (!token || !repo) {
-    if (!fs.existsSync(PROGRESS_FILE)) {
-      return { lastSuccessId: 0, savedIds: [], failedIds: [], notFoundId: null };
-    }
-    return JSON.parse(fs.readFileSync(PROGRESS_FILE, "utf-8"));
+    console.error("❌ GITHUB_TOKEN veya GITHUB_REPO eksik! GitHub senkronizasyonu yapılamıyor.");
+    return { lastSuccessId: 0, savedIds: [], failedIds: [], notFoundId: null };
   }
 
-  const url = `https://api.github.com/repos/${repo}/contents/${filePath}`;
+  const url = `https://api.github.com/repos/${repo}/contents/${PROGRESS_FILE_PATH}`;
   try {
     const res = await axios.get(url, {
       headers: { "Authorization": `token ${token}`, "Accept": "application/vnd.github.v3+json", "User-Agent": "katip-pipeline" }
@@ -109,14 +100,10 @@ async function loadProgress() {
 async function saveProgress(progress, message = "Progress güncellendi") {
   const token = process.env.GITHUB_TOKEN;
   const repo = process.env.GITHUB_REPO;
-  const filePath = "ogm_materyal/progress.json";
 
-  if (!token || !repo) {
-    fs.writeFileSync(PROGRESS_FILE, JSON.stringify(progress, null, 2));
-    return;
-  }
+  if (!token || !repo) return;
 
-  const url = `https://api.github.com/repos/${repo}/contents/${filePath}`;
+  const url = `https://api.github.com/repos/${repo}/contents/${PROGRESS_FILE_PATH}`;
   const body = {
     message: message,
     content: Buffer.from(JSON.stringify(progress, null, 2)).toString("base64")
@@ -147,14 +134,10 @@ async function saveProgress(progress, message = "Progress güncellendi") {
 async function loadData() {
   const token = process.env.GITHUB_TOKEN;
   const repo = process.env.GITHUB_REPO;
-  const filePath = "ogm_materyal/sorular.json";
 
-  if (!token || !repo) {
-    if (!fs.existsSync(DATA_FILE)) return [];
-    return JSON.parse(fs.readFileSync(DATA_FILE, "utf-8"));
-  }
+  if (!token || !repo) return [];
 
-  const url = `https://api.github.com/repos/${repo}/contents/${filePath}`;
+  const url = `https://api.github.com/repos/${repo}/contents/${DATA_FILE_PATH}`;
   try {
     const res = await axios.get(url, {
       headers: { "Authorization": `token ${token}`, "Accept": "application/vnd.github.v3+json", "User-Agent": "katip-pipeline" }
@@ -178,14 +161,10 @@ async function loadData() {
 async function saveData(data, message = "Sorular güncellendi") {
   const token = process.env.GITHUB_TOKEN;
   const repo = process.env.GITHUB_REPO;
-  const filePath = "ogm_materyal/sorular.json";
 
-  if (!token || !repo) {
-    fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
-    return;
-  }
+  if (!token || !repo) return;
 
-  const url = `https://api.github.com/repos/${repo}/contents/${filePath}`;
+  const url = `https://api.github.com/repos/${repo}/contents/${DATA_FILE_PATH}`;
   const body = {
     message: message,
     content: Buffer.from(JSON.stringify(data, null, 2)).toString("base64")
@@ -223,14 +202,10 @@ async function saveData(data, message = "Sorular güncellendi") {
 async function loadLogs() {
   const token = process.env.GITHUB_TOKEN;
   const repo = process.env.GITHUB_REPO;
-  const filePath = "ogm_materyal/logs.json";
 
-  if (!token || !repo) {
-    if (!fs.existsSync(LOG_FILE)) return {};
-    return JSON.parse(fs.readFileSync(LOG_FILE, "utf-8"));
-  }
+  if (!token || !repo) return {};
 
-  const url = `https://api.github.com/repos/${repo}/contents/${filePath}`;
+  const url = `https://api.github.com/repos/${repo}/contents/${LOG_FILE_PATH}`;
   try {
     const res = await axios.get(url, {
       headers: { "Authorization": `token ${token}`, "Accept": "application/vnd.github.v3+json", "User-Agent": "katip-pipeline" }
@@ -249,14 +224,10 @@ async function loadLogs() {
 async function saveLogs(logs, message = "Logs güncellendi") {
   const token = process.env.GITHUB_TOKEN;
   const repo = process.env.GITHUB_REPO;
-  const filePath = "ogm_materyal/logs.json";
 
-  if (!token || !repo) {
-    fs.writeFileSync(LOG_FILE, JSON.stringify(logs, null, 2));
-    return;
-  }
+  if (!token || !repo) return;
 
-  const url = `https://api.github.com/repos/${repo}/contents/${filePath}`;
+  const url = `https://api.github.com/repos/${repo}/contents/${LOG_FILE_PATH}`;
   const body = {
     message: message,
     content: Buffer.from(JSON.stringify(logs, null, 2)).toString("base64")
